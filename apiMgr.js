@@ -96,7 +96,7 @@ var apiMgr = {
         if (apiItem) {
             if (apiItem.type === 'json') {
                 res.writeHead(200,{'Content-Type':'application/json;charset=utf-8'});                
-                res.end(JSON.stringify(apiItem.data))
+                res.end(apiItem.data)
             } else if (apiItem.type === 'binary') {
                 res.writeHead(200,{'Content-Type':'application/octet-stream', "Content-disposition": "attachment; filename=binary.docx"});
                 const src = fs.createReadStream('./static/binary.docx');
