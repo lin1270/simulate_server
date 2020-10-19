@@ -1,116 +1,96 @@
 
 const fs = require('fs')
 
-let g_data = []
-const filePath = './data/api.json'
+const dbRootPath = './data/'
 
-function g_getItem(name, method) {
-    return g_data.find((item)=>{
-        return item.name === name && item.method === method
-    })
-}
 
-function g_addItem(item) {
-    let foundItem = g_getItem(item.name, item.method)
-    if (!foundItem) {
-        g_data.push(item)
-    } else {
-        for(let key in item) {
-            foundItem[key] = item[key]
-        }
+function forEachDir(currentPath,list){
+    if(!fs.existsSync(currentPath)){
+        console.log('当前目录 “' + currentPath + '” 不存在')
+        return
     }
-    
-    fs.writeFile(filePath, JSON.stringify(g_data), (e)=>{
-        if (e) {
-            console.log('...save api error')
-        } else {
-            console.log('...save api successfully.')
+    fs.readdirSync(currentPath).map((fileName)=>{
+        let stat = fs.lstatSync(currentPath + fileName)
+        if(stat.isDirectory()){
+            forEachDir(currentPath+fileName+'/',list)
+        }else if(stat.isFile()){
+            try{
+                let item = JSON.parse(fs.readFileSync(currentPath + fileName,"utf-8"))
+                if( Object.prototype.toString.call(item) !== "[object Object]" ){
+                    throw new Error()
+                }
+                list.push(item) 
+            }catch(e){
+                console.log('导入 “'+ currentPath + fileName + '” 文件内容异常！' )
+            }
         }
     })
 }
 
 var apiMgr = {
+    data : [],
     init() {
-        try {
-            const stream = String(fs.readFileSync(filePath))
-            if (stream) {
-                try {
-                    g_data = JSON.parse(stream)
-                } catch(e) {
-                    g_data = []
-                    console.log('...read api error')
+        forEachDir(dbRootPath,this.data)
+    },
+
+    handleRequest(req, res, config) {
+        let validateHasBlod = /^url\((\S+)\)$/g
+        let cfgResBody = config.resBody;
+        if (Object.prototype.toString.call(cfgResBody) !== "[object String]") {
+            cfgResBody = JSON.stringify(cfgResBody)
+        }
+        let response = {
+            status:config.resStatus || 200,
+            header:config.resHeader,
+            body:cfgResBody
+        }
+        if(config.branch && req.originalUrl in config.branch){
+            let {resStatus,resHeader,resBody} = config.branch[req.originalUrl]
+
+            if (Object.prototype.toString.call(resBody) !== "[object String]") {
+                resBody = JSON.stringify(resBody)
+            }
+            response['status'] = resStatus || response['status']
+            response['header'] = resHeader || response['header']
+            response['body'] = resBody || response['body']
+        }
+
+        let baseHeader = {
+            // 'Content-Type':'application/json;charset=utf-8',
+        }
+
+        let validateResult = validateHasBlod.exec(response['body'])
+        // if(validateResult){
+        //     baseHeader = {
+        //         'Content-Type':'application/octet-stream', 
+        //         "Content-disposition": "attachment; filename=binary.docx"
+        //     }
+        // }
+
+
+        response['header'] = response['header'] ? {
+            ...baseHeader,
+            ...response['header']
+        } : baseHeader
+       
+       
+        res.status(response['status'])      
+        res.header(response['header']);
+        if(validateResult){
+            res.sendFile(validateResult[1],{
+                root:__dirname + '/static/',
+            },(err)=>{
+                if(err){
+                    console.log('sendFileError:',err)
                 }
+            })
+        }else{
+            if(typeof response['body'] !== 'string' || typeof response['body'] instanceof Object){
+                response['body'] = String(response['body'])
             }
-        } catch(e) {
-            console.log('...read api error')
-        }        
-    },
-
-    handleCreate(req, res) {
-        res.writeHead(200,{'Content-Type':'application/json;charset=utf-8'});
-        const resJson = {
-            success: true,
-            msg: ''
+            res.send(response['body'])
         }
-
-        const query = req.body
-        if (!query.name || !query.method || !query.type) {
-            resJson.success = false
-            resJson.msg = '[name,method,type] cannot be empty.'
-        }
-        
-        switch (req.type) {
-            case 'json':
-                if (!query.data) {
-                    resJson.success = false
-                    resJson.msg += 'json msg cannot be empty.'
-                }
-                break
-            case 'binary':
-                break
-
-        }
-
-
-        if (resJson.success) {
-            resJson.msg = 'create api successfully'
-
-            const item = {
-                name: query.name,
-                method: query.method,
-                type: query.type,
-                data: query.data || ''
-            }
-            console.log('...add api:', item)
-
-            g_addItem(item)
-        }
-
-        
-        res.end(JSON.stringify(resJson))
-    },
-
-    handleRequest(req, res) {
-        const apiItem = g_getItem(req.params.apiName, req.method)
-
-        if (apiItem) {
-            if (apiItem.type === 'json') {
-                res.writeHead(200,{'Content-Type':'application/json;charset=utf-8'});                
-                res.end(apiItem.data)
-            } else if (apiItem.type === 'binary') {
-                res.writeHead(200,{'Content-Type':'application/octet-stream', "Content-disposition": "attachment; filename=binary.docx"});
-                const src = fs.createReadStream('./static/binary.docx');
-                src.pipe(res);
-            }
-        } else {
-            const resJson = {
-                success: false,
-                msg: 'cannot find api:' + req.params.apiName + ' method:' + req.method
-            }
-            res.writeHead(404,{'Content-Type':'application/json;charset=utf-8'});
-            res.end(JSON.stringify(resJson))
-        }
-    },
+    }
 }
 
 

@@ -1,0 +1,30 @@
+{
+    "method":"get",
+    "route":"/a/b/:C",
+    "resStatus":200,
+    "resHeader":{},
+    "resBody":"5656",
+    "branch":{
+        "/a/b/321?a=1":{
+            "resStatus":400,
+            "resHeader":{
+                "Content-Type":"application/x-www-form-urlencoded;charset=utf-8"
+            },
+            "resBody":"url(test1/test.txt)"
+        },
+        "/a/b/9877":{
+            "resStatus":200,
+            "resHeader":{
+                "Content-Type":"application/octet-stream", 
+                "Content-disposition": "attachment; filename=binary.docx"
+            },
+            "resBody":"url(binary.docx)"
+        },
+        "/a/b/12412?a=3":{
+            "resStatus":500,
+            "resBody":{
+                "abc":123
+            }
+        }
+    }
+}
